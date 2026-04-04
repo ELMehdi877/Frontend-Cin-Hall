@@ -1,14 +1,31 @@
 import { NavLink } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 
 export default function Navbar() {
     const navigate = useNavigate();
     const isLoggedIn = !!localStorage.getItem("token");
 
-    const handleLogout = () => {
-        // On supprime le token puis on revient a login
-        localStorage.removeItem("token");
-        navigate("/login");
+    const handleLogout = async () => {
+        try {
+            const token = localStorage.getItem("token");
+
+            if (token) {
+                // Route backend: POST /logout
+                await axios.post("http://127.0.0.1:8000/api/logout", {}, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+            }
+        } catch (error) {
+            // Meme si l'API echoue, on coupe la session locale
+            console.log(error.response?.data);
+        } finally {
+            // On supprime le token puis on revient a login
+            localStorage.removeItem("token");
+            navigate("/login");
+        }
     };
 
     return <nav className="bg-slate-900 text-white shadow-md">
@@ -28,6 +45,7 @@ export default function Navbar() {
                 {isLoggedIn && (
                     <>
                         <NavLink to="/dashboard" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition">Dashboard</NavLink>
+                        <NavLink to="/profile" className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 transition">Profil</NavLink>
                         <button
                             onClick={handleLogout}
                             className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 transition"

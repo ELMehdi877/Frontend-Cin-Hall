@@ -6,6 +6,7 @@ export default function SessionsList({ filmId, onSelectSession }) {
 	const [sessions, setSessions] = useState([]);
 	const [loadingSessions, setLoadingSessions] = useState(false);
 	const [sessionsError, setSessionsError] = useState("");
+	const [typeFilter, setTypeFilter] = useState("ALL");
 
 	const fetchSessions = async () => {
 		if (!filmId) return;
@@ -63,9 +64,33 @@ export default function SessionsList({ filmId, onSelectSession }) {
 		return type === "VIP" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800";
 	};
 
+	// On filtre localement pour garder le code simple
+	const filteredSessions = sessions.filter((session) => {
+		if (typeFilter === "ALL") {
+			return true;
+		}
+
+		const normalizedType = String(session?.type || "").toUpperCase();
+		return normalizedType === typeFilter;
+	});
+
 	return (
 		<div className="mt-6">
 			<h4 className="text-lg font-semibold text-slate-800 mb-4">Seances disponibles</h4>
+
+			{/* Filtre du type de seance (cahier de charge) */}
+			<div className="mb-4 flex items-center gap-2">
+				<label className="text-sm text-slate-700 font-medium">Filtrer par type:</label>
+				<select
+					value={typeFilter}
+					onChange={(e) => setTypeFilter(e.target.value)}
+					className="border border-slate-300 rounded-md px-3 py-2 text-sm"
+				>
+					<option value="ALL">Toutes</option>
+					<option value="NORMAL">Normale</option>
+					<option value="VIP">VIP</option>
+				</select>
+			</div>
 
 			{loadingSessions && (
 				<p className="text-slate-600">Chargement des seances...</p>
@@ -79,9 +104,13 @@ export default function SessionsList({ filmId, onSelectSession }) {
 				<p className="text-slate-600">Aucune seance disponible pour ce film.</p>
 			)}
 
+			{!loadingSessions && !sessionsError && sessions.length > 0 && filteredSessions.length === 0 && (
+				<p className="text-slate-600">Aucune seance ne correspond a ce filtre.</p>
+			)}
+
 			{/* Affiche les seances en grille */}
 			<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-				{sessions.map((session) => (
+				{filteredSessions.map((session) => (
 					<div key={session.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
 						<div className="flex items-center justify-between mb-2">
 							<p className="font-semibold text-slate-800">{formatDate(session.start_time)}</p>
@@ -126,6 +155,14 @@ export default function SessionsList({ filmId, onSelectSession }) {
 
   getTypeColor:
   - Retourne une couleur CSS selon le type (Normal/VIP).
+
+	typeFilter:
+	- Etat qui garde le filtre choisi par l'utilisateur.
+	- Valeurs: ALL, NORMAL, VIP.
+
+	filteredSessions:
+	- Tableau des seances apres application du filtre.
+	- Si ALL: on affiche toutes les seances.
 
   sessions.map((session) => ...):
   - Boucle sur chaque seance et l'affiche en carte.

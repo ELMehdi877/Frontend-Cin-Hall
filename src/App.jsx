@@ -5,6 +5,7 @@ import Login from "./components/Login";
 import CreateFilm from "./components/CreateFilm";
 import MoviesList from "./components/MoviesList";
 import BookingSeats from "./components/BookingSeats";
+import Profile from "./components/Profile";
 
 function ProtectedRoute({ children }) {
   // Si pas de token, on renvoie vers login
@@ -33,6 +34,14 @@ function App() {
           element={
             <ProtectedRoute>
               <CreateFilm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />
