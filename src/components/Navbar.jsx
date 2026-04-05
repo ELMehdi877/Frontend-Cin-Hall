@@ -67,6 +67,8 @@ export default function Navbar({ isCollapsed = false, onToggleCollapse = () => {
                     <>
                         <NavLink to="/dashboard" className={navItemClass}>{isCollapsed ? "D" : "Dashboard"}</NavLink>
                         <NavLink to="/reservation-sessions" className={navItemClass}>{isCollapsed ? "Rz" : "Reservation"}</NavLink>
+                        <NavLink to="/my-reservations" className={navItemClass}>{isCollapsed ? "Mr" : "Mes reserv."}</NavLink>
+                        <NavLink to="/my-tickets" className={navItemClass}>{isCollapsed ? "Tk" : "Mes tickets"}</NavLink>
                         <NavLink to="/rooms" className={navItemClass}>{isCollapsed ? "Rm" : "Rooms"}</NavLink>
                         <NavLink to="/sessions-manager" className={navItemClass}>{isCollapsed ? "S" : "Sessions"}</NavLink>
                         <NavLink to="/profile" className={navItemClass}>{isCollapsed ? "P" : "Profil"}</NavLink>

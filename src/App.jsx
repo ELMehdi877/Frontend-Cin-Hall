@@ -10,6 +10,10 @@ import Profile from "./components/Profile";
 import RoomManager from "./components/RoomManager";
 import SessionManager from "./components/SessionManager";
 import ReservationSessions from "./components/ReservationSessions";
+import MyReservations from "./components/MyReservations";
+import PaymentSuccess from "./components/PaymentSuccess";
+import PaymentCancel from "./components/PaymentCancel";
+import MyTickets from "./components/MyTickets";
 
 function ProtectedRoute({ children }) {
   // Si pas de token, on renvoie vers login
@@ -76,6 +80,38 @@ function App() {
             element={
               <ProtectedRoute>
                 <ReservationSessions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-reservations"
+            element={
+              <ProtectedRoute>
+                <MyReservations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-tickets"
+            element={
+              <ProtectedRoute>
+                <MyTickets />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/payment/success"
+            element={
+              <ProtectedRoute>
+                <PaymentSuccess />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/payment/cancel"
+            element={
+              <ProtectedRoute>
+                <PaymentCancel />
               </ProtectedRoute>
             }
           />
