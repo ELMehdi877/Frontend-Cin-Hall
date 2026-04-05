@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useState } from "react";
 import Navbar from "./components/Navbar";
 import Register from "./components/Register";
 import Login from "./components/Login";
@@ -21,50 +22,57 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
-  return (
-    <div>
-      <Navbar />
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-      <Routes>
-        <Route path="/" element={<Navigate to="/movies" />} />
-        <Route path="/movies" element={<MoviesList />} />
-        <Route path="/booking/:sessionId" element={<BookingSeats />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <CreateFilm />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/rooms"
-          element={
-            <ProtectedRoute>
-              <RoomManager />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/sessions-manager"
-          element={
-            <ProtectedRoute>
-              <SessionManager />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/create-film" element={<Navigate to="/dashboard" />} />
-      </Routes>
+  return (
+    <div className="min-h-screen bg-slate-100">
+      <Navbar
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+      />
+
+      <main className={isSidebarCollapsed ? "md:ml-20" : "md:ml-64"}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/movies" />} />
+          <Route path="/movies" element={<MoviesList />} />
+          <Route path="/booking/:sessionId" element={<BookingSeats />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <CreateFilm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/rooms"
+            element={
+              <ProtectedRoute>
+                <RoomManager />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sessions-manager"
+            element={
+              <ProtectedRoute>
+                <SessionManager />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/create-film" element={<Navigate to="/dashboard" />} />
+        </Routes>
+      </main>
     </div>
   );
 }

@@ -2,9 +2,19 @@ import { NavLink } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-export default function Navbar() {
+export default function Navbar({ isCollapsed = false, onToggleCollapse = () => {} }) {
     const navigate = useNavigate();
     const isLoggedIn = !!localStorage.getItem("token");
+
+    const navItemClass = ({ isActive }) => {
+        const baseClass = isCollapsed
+            ? "px-2 py-2 rounded-lg transition md:w-full md:text-center"
+            : "px-4 py-2 rounded-lg transition md:w-full md:text-left";
+
+        return isActive
+            ? `${baseClass} bg-blue-600 text-white`
+            : `${baseClass} bg-slate-700 text-slate-100 hover:bg-slate-600`;
+    };
 
     const handleLogout = async () => {
         try {
@@ -28,31 +38,42 @@ export default function Navbar() {
         }
     };
 
-    return <nav className="bg-slate-900 text-white shadow-md">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-            <h1 className="text-xl font-bold">CineHall</h1>
+    return <nav className={`bg-slate-900 text-white shadow-md md:fixed md:inset-y-0 md:left-0 md:shadow-xl ${isCollapsed ? "md:w-20" : "md:w-64"}`}>
+        <div className="px-4 py-4 md:h-full md:flex md:flex-col">
+            <div className="flex items-center justify-between">
+                <h1 className={`text-xl font-bold px-2 ${isCollapsed ? "md:hidden" : ""}`}>CineHall</h1>
 
-            <div className="flex gap-4 items-center">
-                <NavLink to="/movies" className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 transition">Films</NavLink>
+                <button
+                    type="button"
+                    onClick={onToggleCollapse}
+                    className="hidden md:inline-flex items-center justify-center text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded"
+                    title={isCollapsed ? "Ouvrir la sidebar" : "Reduire la sidebar"}
+                >
+                    {isCollapsed ? ">>" : "<<"}
+                </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2 md:mt-6 md:flex-col md:gap-3">
+                <NavLink to="/movies" className={navItemClass}>{isCollapsed ? "F" : "Films"}</NavLink>
 
                 {!isLoggedIn && (
                     <>
-                        <NavLink to="/login" className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition">Login</NavLink>
-                        <NavLink to="/register" className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition">Register</NavLink>
+                        <NavLink to="/login" className={navItemClass}>{isCollapsed ? "L" : "Login"}</NavLink>
+                        <NavLink to="/register" className={navItemClass}>{isCollapsed ? "R" : "Register"}</NavLink>
                     </>
                 )}
 
                 {isLoggedIn && (
                     <>
-                        <NavLink to="/dashboard" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition">Dashboard</NavLink>
-                        <NavLink to="/rooms" className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 transition">Rooms</NavLink>
-                        <NavLink to="/sessions-manager" className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition">Sessions</NavLink>
-                        <NavLink to="/profile" className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 transition">Profil</NavLink>
+                        <NavLink to="/dashboard" className={navItemClass}>{isCollapsed ? "D" : "Dashboard"}</NavLink>
+                        <NavLink to="/rooms" className={navItemClass}>{isCollapsed ? "Rm" : "Rooms"}</NavLink>
+                        <NavLink to="/sessions-manager" className={navItemClass}>{isCollapsed ? "S" : "Sessions"}</NavLink>
+                        <NavLink to="/profile" className={navItemClass}>{isCollapsed ? "P" : "Profil"}</NavLink>
                         <button
                             onClick={handleLogout}
-                            className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 transition"
+                            className={`py-2 rounded-lg bg-red-600 hover:bg-red-700 transition md:w-full ${isCollapsed ? "px-2 md:text-center" : "px-4 md:text-left"}`}
                         >
-                            Logout
+                            {isCollapsed ? "Out" : "Logout"}
                         </button>
                     </>
                 )}
