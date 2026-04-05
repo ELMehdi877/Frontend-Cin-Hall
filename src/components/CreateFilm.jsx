@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 export default function CreateFilm() {
-	// activeSection = menu actif dans la sidebar
-	const [activeSection, setActiveSection] = useState("overview");
-
 	// Etats du formulaire film
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
@@ -12,8 +9,8 @@ export default function CreateFilm() {
 	const [actors, setActors] = useState("");
 	const [durationMinutes, setDurationMinutes] = useState("");
 	const [minimumAge, setMinimumAge] = useState(13);
-	const [image, setImage] = useState("");
 	const [trailerUrl, setTrailerUrl] = useState("");
+	const [editingFilmId, setEditingFilmId] = useState(null);
 
 	const [loading, setLoading] = useState(false);
 	const [message, setMessage] = useState("");
@@ -49,6 +46,17 @@ export default function CreateFilm() {
 		return "Erreur lors de la creation du film";
 	};
 
+	const resetFilmForm = () => {
+		setTitle("");
+		setDescription("");
+		setGenre("");
+		setActors("");
+		setDurationMinutes("");
+		setMinimumAge(13);
+		setTrailerUrl("");
+		setEditingFilmId(null);
+	};
+
 	const handleCreateFilm = async (e) => {
 		e.preventDefault();
 
@@ -58,7 +66,7 @@ export default function CreateFilm() {
 		setLoading(true);
 
 		// Validation simple (champs obligatoires)
-		if (!title || !durationMinutes || !image || !trailerUrl) {
+		if (!title || !durationMinutes || !trailerUrl) {
 			setError("Merci de remplir les champs obligatoires");
 			setLoading(false);
 			return;
@@ -73,38 +81,48 @@ export default function CreateFilm() {
 				return;
 			}
 
-			// Envoi des donnees au backend
-			const response = await axios.post(
-				"http://127.0.0.1:8000/api/films",
-				{
-					title: title,
-					description: description,
-					genre: genre,
-					actors: actors,
-					duration_minutes: Number(durationMinutes),
-					minimum_age: Number(minimumAge),
-					image: image,
-					trailer_url: trailerUrl,
-				},
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
-				}
-			);
+			const payload = {
+				title: title,
+				description: description,
+				genre: genre,
+				actors: actors,
+				duration_minutes: Number(durationMinutes),
+				minimum_age: Number(minimumAge),
+				trailer_url: trailerUrl,
+			};
+
+			let response;
+
+			if (editingFilmId) {
+				// Update film
+				response = await axios.put(
+					`http://127.0.0.1:8000/api/films/${editingFilmId}`,
+					payload,
+					{
+						headers: {
+							Authorization: `Bearer ${token}`,
+						},
+					}
+				);
+				setMessage("Film modifie avec succes");
+			} else {
+				// Creation film
+				response = await axios.post(
+					"http://127.0.0.1:8000/api/films",
+					payload,
+					{
+						headers: {
+							Authorization: `Bearer ${token}`,
+						},
+					}
+				);
+				setMessage("Film cree avec succes");
+			}
 
 			console.log(response.data);
-			setMessage("Film cree avec succes");
 
 			// Reset simple du formulaire
-			setTitle("");
-			setDescription("");
-			setGenre("");
-			setActors("");
-			setDurationMinutes("");
-			setMinimumAge(13);
-			setImage("");
-			setTrailerUrl("");
+			resetFilmForm();
 
 			// Recharge la liste apres creation
 			fetchFilms();
@@ -161,6 +179,28 @@ export default function CreateFilm() {
 		setSelectedFilm(film);
 	};
 
+	const handleEditFilm = (film) => {
+		setEditingFilmId(film.id);
+		setTitle(film.title || "");
+		setDescription(film.description || "");
+		setGenre(film.genre || "");
+		setActors(film.actors || "");
+		setDurationMinutes(film.duration_minutes || "");
+		setMinimumAge(film.minimum_age || 13);
+		setTrailerUrl(film.trailer_url || "");
+		setSelectedFilm(null);
+		setMessage("");
+		setError("");
+		setDebugInfo("");
+	};
+
+	const handleCancelEdit = () => {
+		resetFilmForm();
+		setMessage("");
+		setError("");
+		setDebugInfo("");
+	};
+
 	const handleDeleteFilm = async (filmId) => {
 		// On demande une confirmation avant de supprimer
 		if (!confirm("Es-tu sur de vouloir supprimer ce film ?")) {
@@ -184,6 +224,9 @@ export default function CreateFilm() {
 
 			// Ferme le detail et recharge la liste
 			setSelectedFilm(null);
+			if (editingFilmId === filmId) {
+				handleCancelEdit();
+			}
 			setMessage("Film supprime avec succes");
 			fetchFilms();
 		} catch (err) {
@@ -202,75 +245,36 @@ export default function CreateFilm() {
 	};
 
 	useEffect(() => {
-		// Charge les films quand on ouvre la section Films
-		if (activeSection === "films") {
-			fetchFilms();
-		}
-	}, [activeSection]);
+		// Charge les films au demarrage de la page
+		fetchFilms();
+	}, []);
 
 	return (
 		<div className="min-h-screen bg-slate-100">
 			<div className="max-w-6xl mx-auto p-4 md:p-6">
-				<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-					{/* Sidebar */}
-					<aside className="md:col-span-1 bg-slate-900 text-white rounded-xl p-4">
-						<h2 className="text-lg font-bold mb-4">Dashboard</h2>
-
-						<button
-							onClick={() => setActiveSection("overview")}
-							className="w-full text-left px-3 py-2 rounded-lg mb-2 bg-slate-800 hover:bg-slate-700"
-						>
-							Apercu
-						</button>
-
-						<button
-							onClick={() => setActiveSection("films")}
-							className="w-full text-left px-3 py-2 rounded-lg mb-2 bg-slate-800 hover:bg-slate-700"
-						>
-							Films
-						</button>
-
-						<button
-							onClick={() => setActiveSection("reservations")}
-							className="w-full text-left px-3 py-2 rounded-lg mb-2 bg-slate-800 hover:bg-slate-700"
-						>
-							Reservations
-						</button>
-
-						<button
-							onClick={() => setActiveSection("profile")}
-							className="w-full text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700"
-						>
-							Profil
-						</button>
-					</aside>
-
-					{/* Contenu */}
-					<section className="md:col-span-3 bg-white rounded-xl shadow p-5 md:p-6">
-						<h1 className="text-2xl font-bold text-slate-800">Bienvenue sur CinéHall</h1>
+				<div className="bg-white rounded-xl shadow p-5 md:p-6">
+					<section>
+						<h1 className="text-2xl font-bold text-slate-800">Gestion des films</h1>
 						<p className="text-slate-600 mt-1">
-							Tableau de bord simple. On va ajouter les vraies donnees et pages petit a petit.
+							Formulaire simple pour creer et gerer les films.
 						</p>
 
-						{activeSection === "overview" && (
-							<div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-								<div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-									<p className="text-sm text-slate-500">Films</p>
-									<p className="text-2xl font-bold text-blue-700">0</p>
-								</div>
-								<div className="bg-green-50 border border-green-100 rounded-lg p-4">
-									<p className="text-sm text-slate-500">Reservations</p>
-									<p className="text-2xl font-bold text-green-700">0</p>
-								</div>
-							</div>
-						)}
+						<div className="mt-6">
 
-						{activeSection === "films" && (
-							<div className="mt-6">
-								<h3 className="text-xl font-semibold text-slate-800">Section Films</h3>
-								<p className="text-slate-600 mt-2">
-									Formulaire simple pour creer un film.
-								</p>
+							<div className="mb-3 flex items-center gap-3">
+								<h3 className="text-lg font-semibold text-slate-800">
+									{editingFilmId ? "Modifier le film" : "Creer un film"}
+								</h3>
+								{editingFilmId && (
+									<button
+										type="button"
+										onClick={handleCancelEdit}
+										className="bg-slate-700 text-white px-3 py-1 rounded-md hover:bg-slate-600"
+									>
+										Annuler edition
+									</button>
+								)}
+							</div>
 
 								<button
 									onClick={fetchFilms}
@@ -325,6 +329,17 @@ export default function CreateFilm() {
 									</div>
 
 									<div>
+										<label className="block text-sm font-medium text-slate-700 mb-1">Minimum age *</label>
+										<input
+											type="number"
+											min="0"
+											value={minimumAge}
+											onChange={(e) => setMinimumAge(e.target.value)}
+											className="w-full border border-slate-300 rounded-lg p-2"
+										/>
+									</div>
+
+									<div>
 										<label className="block text-sm font-medium text-slate-700 mb-1">Actors</label>
 										<input
 											type="text"
@@ -346,27 +361,6 @@ export default function CreateFilm() {
 										/>
 									</div>
 
-									<div>
-										<label className="block text-sm font-medium text-slate-700 mb-1">Minimum age</label>
-										<input
-											type="number"
-											value={minimumAge}
-											onChange={(e) => setMinimumAge(e.target.value)}
-											className="w-full border border-slate-300 rounded-lg p-2"
-										/>
-									</div>
-
-									<div className="md:col-span-2">
-										<label className="block text-sm font-medium text-slate-700 mb-1">Image URL *</label>
-										<input
-											type="url"
-											value={image}
-											onChange={(e) => setImage(e.target.value)}
-											placeholder="https://..."
-											className="w-full border border-slate-300 rounded-lg p-2"
-										/>
-									</div>
-
 									<div className="md:col-span-2">
 										<label className="block text-sm font-medium text-slate-700 mb-1">Trailer URL *</label>
 										<input
@@ -384,7 +378,7 @@ export default function CreateFilm() {
 											disabled={loading}
 											className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
 										>
-											{loading ? "Creation..." : "Creer Film"}
+											{loading ? "Sauvegarde..." : editingFilmId ? "Modifier Film" : "Creer Film"}
 										</button>
 									</div>
 								</form>
@@ -407,10 +401,15 @@ export default function CreateFilm() {
 										<p><span className="font-medium">Acteurs:</span> {selectedFilm.actors || "-"}</p>
 										<p><span className="font-medium">Duree:</span> {selectedFilm.duration_minutes || "-"} min</p>
 										<p><span className="font-medium">Age minimum:</span> {selectedFilm.minimum_age || "-"}</p>
-										<p><span className="font-medium">Image:</span> {selectedFilm.image || "-"}</p>
 										<p><span className="font-medium">Trailer:</span> {selectedFilm.trailer_url || "-"}</p>
 
 										<div className="mt-4 flex gap-2">
+											<button
+												onClick={() => handleEditFilm(selectedFilm)}
+												className="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700"
+											>
+												Modifier
+											</button>
 											<button
 												onClick={() => handleDeleteFilm(selectedFilm.id)}
 												className="bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700"
@@ -442,7 +441,14 @@ export default function CreateFilm() {
 												<p className="font-semibold text-slate-800">{film.title}</p>
 												<p className="text-sm text-slate-600">Genre: {film.genre || "-"}</p>
 												<p className="text-sm text-slate-600">Duree: {film.duration_minutes || "-"} min</p>
-												<p className="text-sm text-slate-600">Age min: {film.minimum_age || "-"}</p>
+													<p className="text-sm text-slate-600">Age min: {film.minimum_age || "-"}</p>
+												<button
+													type="button"
+													onClick={() => handleEditFilm(film)}
+													className="mt-2 mr-2 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
+												>
+													Modifier
+												</button>
 												<button
 													onClick={() => handleShowDetails(film)}
 													className="mt-2 bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700"
@@ -453,26 +459,7 @@ export default function CreateFilm() {
 										))}
 									</div>
 								</div>
-							</div>
-						)}
-
-						{activeSection === "reservations" && (
-							<div className="mt-6">
-								<h3 className="text-xl font-semibold text-slate-800">Section Reservations</h3>
-								<p className="text-slate-600 mt-2">
-									Ici on ajoutera la gestion des sieges et reservations.
-								</p>
-							</div>
-						)}
-
-						{activeSection === "profile" && (
-							<div className="mt-6">
-								<h3 className="text-xl font-semibold text-slate-800">Section Profil</h3>
-								<p className="text-slate-600 mt-2">
-									Ici on ajoutera les informations utilisateur.
-								</p>
-							</div>
-						)}
+						</div>
 					</section>
 				</div>
 			</div>
@@ -486,18 +473,15 @@ export default function CreateFilm() {
   sidebar:
   - Colonne a gauche avec les boutons du menu.
 
-  activeSection:
-  - State qui contient la section active (overview, films, etc.).
-
-  setActiveSection("films"):
-  - Change la section active quand on clique un bouton.
-
-  rendu conditionnel:
-  - {activeSection === "films" && (...)}
-  - Affiche le bloc seulement si la condition est vraie.
-
 	handleCreateFilm:
 	- Fonction appelee quand on envoie le formulaire film.
+	- Si editingFilmId existe: update (PUT), sinon create (POST).
+
+	handleEditFilm:
+	- Remplit le formulaire avec les donnees du film choisi.
+
+	editingFilmId:
+	- Si different de null, le formulaire est en mode modification.
 
 	Authorization Bearer token:
 	- Le token JWT est envoye dans headers pour prouver que l'utilisateur est connecte.

@@ -6,6 +6,8 @@ export default function RoomManager() {
   const [name, setName] = useState("");
   const [type, setType] = useState("normal");
   const [capacity, setCapacity] = useState(15);
+  const [coupleSeatsInput, setCoupleSeatsInput] = useState("");
+  const [seatAdjacentInput, setSeatAdjacentInput] = useState("");
   const [editingRoomId, setEditingRoomId] = useState(null);
 
   // Etats pour la liste des rooms
@@ -16,6 +18,27 @@ export default function RoomManager() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
+
+  const getApiErrorMessage = (err) => {
+    const validationErrors = err.response?.data?.errors;
+    if (validationErrors) {
+      const firstKey = Object.keys(validationErrors)[0];
+      if (firstKey && validationErrors[firstKey]?.length > 0) {
+        return validationErrors[firstKey][0];
+      }
+    }
+
+    if (err.response?.data?.message) {
+      return err.response.data.message;
+    }
+
+    if (err.request && !err.response) {
+      return "API non joignable. Verifie que le backend est demarre.";
+    }
+
+    return "Erreur lors de la sauvegarde de la room";
+  };
 
   const getAuthConfig = () => {
     const token = localStorage.getItem("token");
@@ -40,6 +63,7 @@ export default function RoomManager() {
   const loadRooms = async () => {
     setLoadingRooms(true);
     setError("");
+    setDebugInfo("");
 
     try {
       const config = getAuthConfig();
@@ -63,11 +87,43 @@ export default function RoomManager() {
     loadRooms();
   }, []);
 
+  const parseNumberList = (text) => {
+    if (!text.trim()) {
+      return [];
+    }
+
+    return text
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value > 0);
+  };
+
+  const parseAdjacentPairs = (text) => {
+    const map = {};
+
+    if (!text.trim()) {
+      return map;
+    }
+
+    const pairs = text.split(",");
+
+    for (const rawPair of pairs) {
+      const [left, right] = rawPair.split("-").map((value) => Number(value.trim()));
+
+      if (Number.isInteger(left) && left > 0 && Number.isInteger(right) && right > 0) {
+        map[left] = right;
+      }
+    }
+
+    return map;
+  };
+
   const handleCreateRoom = async (e) => {
     e.preventDefault();
 
     setMessage("");
     setError("");
+    setDebugInfo("");
     setLoading(true);
 
     // Validation tres simple
@@ -92,6 +148,39 @@ export default function RoomManager() {
         capacity: Number(capacity),
       };
 
+      // Les sieges (couple / adjacent) sont seulement geres a la creation
+      if (!editingRoomId && type === "VIP") {
+        const coupleSeats = parseNumberList(coupleSeatsInput);
+        const seatAdjacent = parseAdjacentPairs(seatAdjacentInput);
+
+        // Validation simple: les numeros doivent etre entre 1 et capacity
+        const isCoupleOutOfRange = coupleSeats.some((seatNumber) => seatNumber > Number(capacity));
+        if (isCoupleOutOfRange) {
+          setError("Certains numeros de couple_seats depassent la capacite de la salle.");
+          setLoading(false);
+          return;
+        }
+
+        const isAdjacentOutOfRange = Object.entries(seatAdjacent).some(([fromSeat, toSeat]) => {
+          return Number(fromSeat) > Number(capacity) || Number(toSeat) > Number(capacity);
+        });
+
+        if (isAdjacentOutOfRange) {
+          setError("Certains numeros de seat_adjacent depassent la capacite de la salle.");
+          setLoading(false);
+          return;
+        }
+
+        // On n'envoie que les champs remplis pour eviter des erreurs de validation inutiles
+        if (coupleSeats.length > 0) {
+          payload.couple_seats = coupleSeats;
+        }
+
+        if (Object.keys(seatAdjacent).length > 0) {
+          payload.seat_adjacent = seatAdjacent;
+        }
+      }
+
       if (editingRoomId) {
         // Route backend: PUT /rooms/{id}
         await axios.put(`http://127.0.0.1:8000/api/rooms/${editingRoomId}`, payload, config);
@@ -105,11 +194,15 @@ export default function RoomManager() {
       setName("");
       setType("normal");
       setCapacity(15);
+      setCoupleSeatsInput("");
+      setSeatAdjacentInput("");
       setEditingRoomId(null);
 
       loadRooms();
     } catch (err) {
-      setError(err.response?.data?.message || "Erreur lors de la sauvegarde de la room");
+      setError(getApiErrorMessage(err));
+      setDebugInfo(`Status: ${err.response?.status || "inconnu"}`);
+      console.log(err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -121,8 +214,11 @@ export default function RoomManager() {
     setName(room.name || "");
     setType(room.type || "normal");
     setCapacity(room.capacity || 15);
+    setCoupleSeatsInput("");
+    setSeatAdjacentInput("");
     setMessage("");
     setError("");
+    setDebugInfo("");
   };
 
   const handleCancelEdit = () => {
@@ -130,8 +226,11 @@ export default function RoomManager() {
     setName("");
     setType("normal");
     setCapacity(15);
+    setCoupleSeatsInput("");
+    setSeatAdjacentInput("");
     setMessage("");
     setError("");
+    setDebugInfo("");
   };
 
   const handleDeleteRoom = async (roomId) => {
@@ -158,7 +257,9 @@ export default function RoomManager() {
 
       loadRooms();
     } catch (err) {
-      setError(err.response?.data?.message || "Erreur lors de la suppression de la room");
+      setError(getApiErrorMessage(err));
+      setDebugInfo(`Status: ${err.response?.status || "inconnu"}`);
+      console.log(err.response?.data);
     }
   };
 
@@ -171,7 +272,12 @@ export default function RoomManager() {
         </p>
 
         {message && <p className="mb-4 text-green-700 bg-green-100 rounded-lg p-3">{message}</p>}
-        {error && <p className="mb-4 text-red-700 bg-red-100 rounded-lg p-3">{error}</p>}
+        {error && (
+          <div className="mb-4 text-red-700 bg-red-100 rounded-lg p-3">
+            <p>{error}</p>
+            {debugInfo && <p className="text-xs mt-1">{debugInfo}</p>}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow p-5 md:p-6">
@@ -215,6 +321,42 @@ export default function RoomManager() {
                 </select>
               </div>
 
+              {type === "VIP" && !editingRoomId && (
+                <>
+                  <div>
+                    <label className="block mb-1 text-slate-700 font-medium">
+                      Sieges couple (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={coupleSeatsInput}
+                      onChange={(e) => setCoupleSeatsInput(e.target.value)}
+                      placeholder="Ex: 3,5,8"
+                      className="w-full border border-slate-300 rounded-lg p-3"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Liste des numeros de sieges qui doivent etre de type couple.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 text-slate-700 font-medium">
+                      Liaisons siege partenaire (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={seatAdjacentInput}
+                      onChange={(e) => setSeatAdjacentInput(e.target.value)}
+                      placeholder="Ex: 3-4,5-6"
+                      className="w-full border border-slate-300 rounded-lg p-3"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Format: siege_couple-partenaire, separe par des virgules.
+                    </p>
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block mb-1 text-slate-700 font-medium">Capacite</label>
                 <input
@@ -237,7 +379,7 @@ export default function RoomManager() {
 
             {/* Explication simple */}
             <p className="text-sm text-slate-500 mt-4">
-              Ici on envoie seulement le minimum necessaire: nom, type et capacite.
+              Si la room est VIP, tu peux aussi envoyer couple_seats et seat_adjacent.
             </p>
           </div>
 
@@ -304,6 +446,15 @@ export default function RoomManager() {
 
   handleCreateRoom:
   - Envoie POST /rooms pour creer une nouvelle room.
+  - Si type VIP: envoie aussi couple_seats et seat_adjacent.
+
+  couple_seats:
+  - Tableau des numeros de sieges a creer en type "couple".
+  - Exemple: [3, 5, 8]
+
+  seat_adjacent:
+  - Objet de liaison siege couple -> siege partenaire.
+  - Exemple: { 3: 4, 5: 6 }
 
   handleEditRoom:
   - Remplit le formulaire avec les donnees de la room choisie.

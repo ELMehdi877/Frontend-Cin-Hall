@@ -6,6 +6,10 @@ export default function BookingSeats() {
 	const { sessionId } = useParams();
 	const navigate = useNavigate();
 
+	// Infos de la session et de la room
+	const [sessionInfo, setSessionInfo] = useState(null);
+	const [roomInfo, setRoomInfo] = useState(null);
+
 	// Etats pour les sieges
 	const [seats, setSeats] = useState([]);
 	const [loadingSeats, setLoadingSeats] = useState(false);
@@ -31,10 +35,31 @@ export default function BookingSeats() {
 		};
 	};
 
-	const normalizeSeats = (data) => {
-		const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+	const normalizeList = (data) => {
+		return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+	};
 
-		return list.map((seat, index) => {
+	const normalizeItem = (data) => {
+		return data?.data || data || null;
+	};
+
+	const getSeatPriceByType = (seatType) => {
+		const normalizedType = String(seatType || "normal").toLowerCase();
+
+		if (normalizedType === "vip") {
+			return 100;
+		}
+
+		if (normalizedType === "couple") {
+			return 150;
+		}
+
+		return 50;
+	};
+
+	const normalizeSeats = (data) => {
+		const list = normalizeList(data);
+		const mappedSeats = list.map((seat, index) => {
 			const row = seat.row || seat.row_label || "A";
 			const number = Number(seat.number || seat.seat_number || index + 1);
 
@@ -48,13 +73,78 @@ export default function BookingSeats() {
 				row: row,
 				number: number,
 				status: seat.status || "available",
-				price: Number(seat.price || 0),
+				type: String(seat.type || seat.seat_type || "normal"),
 				// On reste flexible selon le format backend
 				isCouple:
 					seat.is_couple === true ||
 					String(seat.type || seat.seat_type || "").toLowerCase() === "couple",
 			};
 		});
+
+		// Protection frontend: si l'API renvoie des doublons, on garde un seul siege par id/position
+		const uniqueBySeat = new Map();
+
+		for (const seat of mappedSeats) {
+			const dedupeKey = seat.id !== null ? `id-${seat.id}` : `${seat.row}-${seat.number}`;
+
+			if (!uniqueBySeat.has(dedupeKey)) {
+				uniqueBySeat.set(dedupeKey, seat);
+				continue;
+			}
+
+			const existing = uniqueBySeat.get(dedupeKey);
+
+			// Si une version est reservee et l'autre disponible, on garde reservee
+			if (existing.status !== "reserved" && seat.status === "reserved") {
+				uniqueBySeat.set(dedupeKey, seat);
+			}
+		}
+
+		return Array.from(uniqueBySeat.values()).sort((a, b) => {
+			if (a.row === b.row) {
+				return a.number - b.number;
+			}
+
+			return String(a.row).localeCompare(String(b.row));
+		});
+	};
+
+	const normalizeSeatGrid = (room, seatList) => {
+		const capacity = Number(room?.capacity || 0);
+		const seatsByNumber = new Map(seatList.map((seat) => [Number(seat.number), seat]));
+
+		return Array.from({ length: capacity }, (_, index) => {
+			const seatNumber = index + 1;
+			const existingSeat = seatsByNumber.get(seatNumber);
+
+			if (existingSeat) {
+				return {
+					...existingSeat,
+					seatKey: existingSeat.seatKey || `seat-${seatNumber}`,
+				};
+			}
+
+			// Si le backend ne renvoie pas tous les sieges, on garde une place libre visuelle
+			return {
+				id: null,
+				seatKey: `missing-${seatNumber}`,
+				row: "A",
+				number: seatNumber,
+				status: "available",
+				type: "normal",
+				isCouple: false,
+			};
+		});
+	};
+
+	const loadSessionInfo = async (config) => {
+		const response = await axios.get(`http://127.0.0.1:8000/api/sessions/${sessionId}`, config);
+		const data = normalizeItem(response.data);
+
+		setSessionInfo(data);
+		setRoomInfo(data?.room || null);
+
+		return data;
 	};
 
 	const loadSeats = async () => {
@@ -71,13 +161,16 @@ export default function BookingSeats() {
 				return;
 			}
 
+			const sessionData = await loadSessionInfo(config);
+
 			// Route backend: GET /sessions/{session}/seats
 			const response = await axios.get(
 				`http://127.0.0.1:8000/api/sessions/${sessionId}/seats`,
 				config
 			);
 
-			setSeats(normalizeSeats(response.data));
+			const normalizedSeats = normalizeSeats(response.data);
+			setSeats(normalizeSeatGrid(sessionData?.room || roomInfo, normalizedSeats));
 		} catch (err) {
 			setSeatsError(err.response?.data?.message || "Impossible de charger les sieges de cette session");
 		} finally {
@@ -102,39 +195,14 @@ export default function BookingSeats() {
 			return;
 		}
 
-		// Cas special siege couple: on reserve automatiquement 2 sieges (si possible)
-		if (seat.isCouple) {
-			const pairSeat = seats.find(
-				(s) =>
-					s.row === seat.row &&
-					s.number === seat.number + 1 &&
-					s.status !== "reserved" &&
-					!selectedSeats.find((selected) => selected.seatKey === s.seatKey)
-			);
-
-			if (!pairSeat) {
-				setMessage("Siege couple: le 2eme siege n'est pas disponible.");
-				return;
-			}
-
-			setSelectedSeats([...selectedSeats, seat, pairSeat]);
-			return;
-		}
-
 		// Siege standard: on ajoute simplement
 		setSelectedSeats([...selectedSeats, seat]);
 	};
 
 	// Recalcule le prix total quand les sieges changent
 	useEffect(() => {
-		const sum = selectedSeats.reduce((acc, seat) => acc + Number(seat.price || 0), 0);
-
-		// Si l'API ne renvoie pas de prix par siege, fallback simple a 50 DT
-		if (sum === 0 && selectedSeats.length > 0) {
-			setTotalPrice(selectedSeats.length * 50);
-			return;
-		}
-
+		// Alignement backend: normal=50, VIP=100, couple=150
+		const sum = selectedSeats.reduce((acc, seat) => acc + getSeatPriceByType(seat.type), 0);
 		setTotalPrice(sum);
 	}, [selectedSeats]);
 
@@ -174,14 +242,14 @@ export default function BookingSeats() {
 			const response = await axios.post(
 				"http://127.0.0.1:8000/api/reservations",
 				{
-					session_id: Number(sessionId),
+					room_session_id: Number(sessionId),
 					seat_ids: seatIds,
 				},
 				config
 			);
 
 			const data = response.data?.data || response.data;
-			setReservationStatus(data?.status || "reserved");
+			setReservationStatus(data?.status || "pending");
 			setMessage("Reservation creee avec succes. Attention: elle expire dans 15 minutes si elle n'est pas payee.");
 			setSelectedSeats([]);
 
@@ -200,13 +268,40 @@ export default function BookingSeats() {
 	// Organisation simple des sieges par rangee
 	const rows = [...new Set(seats.map((seat) => seat.row))];
 
+	const availableSeatsCount = seats.filter((seat) => seat.status !== "reserved").length;
+	const reservedSeatsCount = seats.filter((seat) => seat.status === "reserved").length;
+	const coupleSeatsCount = seats.filter((seat) => seat.isCouple).length;
+	const roomCapacity = Number(roomInfo?.capacity || seats.length || 0);
+	const sessionType = String(sessionInfo?.type || roomInfo?.type || "normal");
+	const roomName = roomInfo?.name || sessionInfo?.room?.name || `Room ${sessionInfo?.room_id || "-"}`;
+	const filmTitle = sessionInfo?.film?.title || `Film ${sessionInfo?.film_id || "-"}`;
+
 	return (
 		<div className="min-h-screen bg-slate-100 py-6">
 			<div className="max-w-4xl mx-auto px-4 md:px-6">
 				<h1 className="text-3xl font-bold text-slate-800 mb-2">Reservation de sieges</h1>
 				<p className="text-slate-600 mb-6">
-					Session #{sessionId} - Selectionnez vos sieges et confirmez la reservation.
+					Session #{sessionId} - {filmTitle} - {roomName} - Type {sessionType}
 				</p>
+
+				<div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+					<div className="bg-white border border-slate-200 rounded-lg p-4">
+						<p className="text-sm text-slate-600">Capacite room</p>
+						<p className="text-2xl font-bold text-slate-800">{roomCapacity}</p>
+					</div>
+					<div className="bg-white border border-slate-200 rounded-lg p-4">
+						<p className="text-sm text-slate-600">Sieges disponibles</p>
+						<p className="text-2xl font-bold text-green-700">{availableSeatsCount}</p>
+					</div>
+					<div className="bg-white border border-slate-200 rounded-lg p-4">
+						<p className="text-sm text-slate-600">Sieges reserves</p>
+						<p className="text-2xl font-bold text-red-700">{reservedSeatsCount}</p>
+					</div>
+					<div className="bg-white border border-slate-200 rounded-lg p-4">
+						<p className="text-sm text-slate-600">Sieges couple</p>
+						<p className="text-2xl font-bold text-purple-700">{coupleSeatsCount}</p>
+					</div>
+				</div>
 
 				{message && (
 					<p className="mb-4 text-green-700 bg-green-100 rounded-lg p-3">{message}</p>
@@ -237,6 +332,10 @@ export default function BookingSeats() {
 							<div className="w-8 h-8 bg-blue-500 rounded border border-blue-600"></div>
 							<span className="text-sm text-slate-700">Selectionne</span>
 						</div>
+						<div className="flex items-center gap-2">
+							<div className="w-8 h-8 bg-purple-500 rounded border border-purple-600"></div>
+							<span className="text-sm text-slate-700">Couple</span>
+						</div>
 					</div>
 
 					{/* Grille de sieges */}
@@ -261,7 +360,7 @@ export default function BookingSeats() {
 										.filter((seat) => seat.row === row)
 										.map((seat) => {
 											const isSelected = selectedSeats.find((s) => s.seatKey === seat.seatKey);
-											let bgColor = "bg-green-500 hover:bg-green-600 cursor-pointer";
+											let bgColor = seat.isCouple ? "bg-purple-500 hover:bg-purple-600 cursor-pointer" : "bg-green-500 hover:bg-green-600 cursor-pointer";
 
 											if (seat.status === "reserved") {
 												bgColor = "bg-red-500 cursor-not-allowed opacity-50";
@@ -290,7 +389,7 @@ export default function BookingSeats() {
 					{/* Resume de la reservation */}
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 						<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-							<p className="text-sm text-slate-600">Sieges selectionnes</p>
+							<p className="text-sm text-slate-600">Sieges reserves</p>
 							<p className="text-2xl font-bold text-blue-700">
 								{selectedSeats.length}
 							</p>
@@ -315,7 +414,7 @@ export default function BookingSeats() {
 							<p className="font-semibold text-slate-800 mb-2">Sieges selectionnes:</p>
 							<p className="text-slate-700">
 								{selectedSeats
-									.map((s) => `${s.row}${s.number}${s.isCouple ? " (couple)" : ""}`)
+									.map((s) => `${s.row}${s.number} (${String(s.type || "normal").toLowerCase()})`)
 									.join(", ")}
 							</p>
 						</div>
@@ -357,9 +456,9 @@ export default function BookingSeats() {
 	- Liste des sieges charges depuis le backend.
 	- Route utilisee: GET /sessions/{session}/seats.
 
-	isCouple:
-	- Booleen pour un siege couple.
-	- Si true, on essaye d'ajouter automatiquement 2 sieges.
+  isCouple:
+  - Indication de siege couple venant de l'API.
+  - L'ajout automatique du partenaire est gere par le backend.
 
   status: available/reserved:
   - Etat du siege.
@@ -380,7 +479,7 @@ export default function BookingSeats() {
 	- Utilise le prix des sieges; fallback a 50 DT si absent.
 
 	handleConfirmReservation:
-	- Envoie POST /reservations avec session_id et seat_ids.
+	- Envoie POST /reservations avec room_session_id et seat_ids.
 	- Met a jour le message et le statut de reservation.
 
   disabled:

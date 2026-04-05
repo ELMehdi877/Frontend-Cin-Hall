@@ -9,7 +9,6 @@ export default function MoviesList() {
 	const [loadingFilms, setLoadingFilms] = useState(false);
 	const [filmsError, setFilmsError] = useState("");
 	const [selectedFilm, setSelectedFilm] = useState(null);
-	const [quickBookingFilmId, setQuickBookingFilmId] = useState(null);
 	const navigate = useNavigate();
 
 	const fetchFilms = async () => {
@@ -44,54 +43,11 @@ export default function MoviesList() {
 	const handleShowDetails = (film) => {
 		// On memorise le film clique pour afficher ses details
 		setSelectedFilm(film);
-	};
-
-	const handleOpenReservation = async (film) => {
-		setQuickBookingFilmId(film.id);
-
-		try {
-			const token = localStorage.getItem("token");
-			const config = {
-				params: { film_id: film.id },
-			};
-
-			if (token) {
-				config.headers = {
-					Authorization: `Bearer ${token}`,
-				};
-			}
-
-			// Reservation rapide: on prend la premiere seance disponible de ce film
-			const response = await axios.get("http://127.0.0.1:8000/api/sessions", config);
-
-			const data = response.data;
-			const sessions = Array.isArray(data)
-				? data
-				: Array.isArray(data?.data)
-					? data.data
-					: [];
-
-			const sessionToBook = sessions.find((session) => session?.id);
-
-			if (!sessionToBook) {
-				// Fallback: ouvrir les details pour laisser l'utilisateur choisir une seance
-				setSelectedFilm(film);
-				window.scrollTo({ top: 0, behavior: "smooth" });
-				return;
-			}
-
-			navigate(`/booking/${sessionToBook.id}`);
-		} catch (err) {
-			// En cas d'erreur API (401/403/...): on ouvre les details au lieu d'afficher une erreur bloquante
-			setSelectedFilm(film);
-			window.scrollTo({ top: 0, behavior: "smooth" });
-		} finally {
-			setQuickBookingFilmId(null);
-		}
+		window.scrollTo({ top: 0, behavior: "smooth" });
 	};
 
 	const handleSelectSession = (session) => {
-		// Naviguer vers la page de reservation de sieges
+		// Important: on reserve une session (room_session), pas un film
 		navigate(`/booking/${session.id}`);
 	};
 
@@ -202,13 +158,9 @@ export default function MoviesList() {
 									Voir details
 								</button>
 
-								<button
-									onClick={() => handleOpenReservation(film)}
-									disabled={quickBookingFilmId === film.id}
-									className="mt-2 w-full bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition"
-								>
-									{quickBookingFilmId === film.id ? "Ouverture..." : "Reserver"}
-								</button>
+								<p className="mt-2 text-xs text-slate-500">
+									Choisis d'abord une seance dans les details du film.
+								</p>
 							</div>
 						</div>
 					))}

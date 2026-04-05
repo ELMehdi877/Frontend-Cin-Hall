@@ -42,6 +42,8 @@ export default function SessionManager() {
     return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
   };
 
+  const normalizeType = (value) => String(value || "").toLowerCase();
+
   const resetForm = () => {
     setFilmId("");
     setRoomId("");
@@ -113,6 +115,37 @@ export default function SessionManager() {
   useEffect(() => {
     loadBaseData();
   }, []);
+
+  // On garde seulement les rooms qui correspondent au type de session choisi
+  // Exemple: session type normal -> rooms normales uniquement
+  const filteredRooms = rooms.filter((room) => {
+    if (!room?.id) {
+      return false;
+    }
+
+    // En mode edition, on garde aussi la room deja choisie
+    if (String(room.id) === String(roomId)) {
+      return true;
+    }
+
+    return normalizeType(room.type) === normalizeType(type);
+  });
+
+  useEffect(() => {
+    if (!roomId) {
+      return;
+    }
+
+    const selectedRoom = rooms.find((room) => String(room.id) === String(roomId));
+    if (!selectedRoom) {
+      return;
+    }
+
+    // Si l'utilisateur change le type de session, on vide roomId si incompatibilite
+    if (normalizeType(selectedRoom.type) !== normalizeType(type)) {
+      setRoomId("");
+    }
+  }, [type, roomId, rooms]);
 
   const handleCreateSession = async (e) => {
     e.preventDefault();
@@ -265,13 +298,16 @@ export default function SessionManager() {
                   onChange={(e) => setRoomId(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-3"
                 >
-                  <option value="">Choisir une room</option>
-                  {rooms.map((room) => (
+                  <option value="">Choisir une room ({type})</option>
+                  {filteredRooms.map((room) => (
                     <option key={room.id} value={room.id}>
                       {room.name} ({room.type || "normal"})
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Seules les rooms du meme type que la session sont affichees.
+                </p>
               </div>
 
               <div>

@@ -9,6 +9,7 @@ import BookingSeats from "./components/BookingSeats";
 import Profile from "./components/Profile";
 import RoomManager from "./components/RoomManager";
 import SessionManager from "./components/SessionManager";
+import ReservationSessions from "./components/ReservationSessions";
 
 function ProtectedRoute({ children }) {
   // Si pas de token, on renvoie vers login
@@ -67,6 +68,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <SessionManager />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reservation-sessions"
+            element={
+              <ProtectedRoute>
+                <ReservationSessions />
               </ProtectedRoute>
             }
           />
