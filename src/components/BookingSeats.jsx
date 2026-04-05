@@ -65,9 +65,17 @@ export default function BookingSeats() {
 
 			// id backend possible: id, seat_id ou seat.id
 			const backendSeatId = seat.id ?? seat.seat_id ?? seat.seat?.id ?? null;
+			const linkedSeatId =
+				seat.partner_seat?.id ??
+				seat.partnerSeat?.id ??
+				seat.seat_id ??
+				seat.linked_seat_id ??
+				seat.partner_seat_id ??
+				null;
 
 			return {
 				id: backendSeatId,
+				linkedSeatId: linkedSeatId !== backendSeatId ? linkedSeatId : null,
 				// Cle interne stable pour React + selection frontend
 				seatKey: backendSeatId !== null ? `id-${backendSeatId}` : `pos-${row}-${number}-${index}`,
 				row: row,
@@ -77,6 +85,7 @@ export default function BookingSeats() {
 				// On reste flexible selon le format backend
 				isCouple:
 					seat.is_couple === true ||
+					Boolean(seat.partner_seat?.id || seat.partnerSeat?.id) ||
 					String(seat.type || seat.seat_type || "").toLowerCase() === "couple",
 			};
 		});
@@ -113,6 +122,21 @@ export default function BookingSeats() {
 		const capacity = Number(room?.capacity || 0);
 		const seatsByNumber = new Map(seatList.map((seat) => [Number(seat.number), seat]));
 
+		// Si on n'a pas la capacite mais on a deja des sieges, on les affiche tels quels
+		if (capacity <= 0) {
+			if (seatList.length > 0) {
+				return [...seatList].sort((a, b) => {
+					if (a.row === b.row) {
+						return a.number - b.number;
+					}
+
+					return String(a.row).localeCompare(String(b.row));
+				});
+			}
+
+			return [];
+		}
+
 		return Array.from({ length: capacity }, (_, index) => {
 			const seatNumber = index + 1;
 			const existingSeat = seatsByNumber.get(seatNumber);
@@ -133,8 +157,26 @@ export default function BookingSeats() {
 				status: "available",
 				type: "normal",
 				isCouple: false,
+				linkedSeatId: null,
 			};
 		});
+	};
+
+	const loadRoomSeats = async (roomId, config) => {
+		if (!roomId) {
+			return [];
+		}
+
+		try {
+			// Route backend rooms: GET /rooms/{id}
+			const roomResponse = await axios.get(`http://127.0.0.1:8000/api/rooms/${roomId}`, config);
+			const roomData = normalizeItem(roomResponse.data);
+			const roomSeats = normalizeList(roomData?.seats || roomResponse.data?.seats || []);
+
+			return normalizeSeats(roomSeats);
+		} catch (err) {
+			return [];
+		}
 	};
 
 	const loadSessionInfo = async (config) => {
@@ -169,7 +211,13 @@ export default function BookingSeats() {
 				config
 			);
 
-			const normalizedSeats = normalizeSeats(response.data);
+			let normalizedSeats = normalizeSeats(response.data);
+
+			// Si la route sessions/{id}/seats est vide, fallback sur les sieges de la room
+			if (normalizedSeats.length === 0) {
+				normalizedSeats = await loadRoomSeats(sessionData?.room_id, config);
+			}
+
 			setSeats(normalizeSeatGrid(sessionData?.room || roomInfo, normalizedSeats));
 		} catch (err) {
 			setSeatsError(err.response?.data?.message || "Impossible de charger les sieges de cette session");
@@ -188,6 +236,57 @@ export default function BookingSeats() {
 		setReservationStatus("");
 
 		const isAlreadySelected = selectedSeats.find((s) => s.seatKey === seat.seatKey);
+
+		// Couple bidirectionnel:
+		// - lien direct: seat.linkedSeatId
+		// - lien inverse: un autre siege pointe vers seat.id
+		const directLinkedSeat = seat.linkedSeatId
+			? seats.find((candidate) => String(candidate.id) === String(seat.linkedSeatId))
+			: null;
+
+		const reverseLinkedSeat = seat.id
+			? seats.find((candidate) => String(candidate.linkedSeatId) === String(seat.id))
+			: null;
+
+		const pairedSeat = directLinkedSeat || reverseLinkedSeat || null;
+
+		// Si le siege fait partie d'un couple, on gere toujours les 2 ensemble
+		if (seat.isCouple || pairedSeat) {
+			if (isAlreadySelected) {
+				// Retire le siege et son partenaire
+				const linkedSeatKey = pairedSeat?.seatKey;
+				setSelectedSeats(
+					selectedSeats.filter(
+						(selected) => selected.seatKey !== seat.seatKey && selected.seatKey !== linkedSeatKey
+					)
+				);
+				return;
+			}
+
+			if (!pairedSeat) {
+				setSeatsError("Le siege couple n'a pas de siege lie disponible.");
+				return;
+			}
+
+			if (pairedSeat.status === "reserved") {
+				setSeatsError("Le siege partenaire du couple est deja reserve.");
+				return;
+			}
+
+			const alreadySelectedLinkedSeat = selectedSeats.find((selected) => selected.seatKey === pairedSeat.seatKey);
+
+			if (alreadySelectedLinkedSeat) {
+				setSelectedSeats(
+					selectedSeats.filter(
+						(selected) => selected.seatKey !== seat.seatKey && selected.seatKey !== pairedSeat.seatKey
+					)
+				);
+				return;
+			}
+
+			setSelectedSeats([...selectedSeats, seat, pairedSeat]);
+			return;
+		}
 
 		if (isAlreadySelected) {
 			// Retire le siege
@@ -233,7 +332,9 @@ export default function BookingSeats() {
 				.map((seat) => seat.id)
 				.filter((id) => id !== null && id !== undefined);
 
-			if (seatIds.length !== selectedSeats.length) {
+			const uniqueSeatIds = [...new Set(seatIds)];
+
+			if (uniqueSeatIds.length !== selectedSeats.length) {
 				setSeatsError("Certains sieges n'ont pas d'identifiant backend. Impossible de reserver.");
 				return;
 			}
@@ -243,7 +344,8 @@ export default function BookingSeats() {
 				"http://127.0.0.1:8000/api/reservations",
 				{
 					room_session_id: Number(sessionId),
-					seat_ids: seatIds,
+					seat_ids: uniqueSeatIds,
+					total_price: Number(totalPrice),
 				},
 				config
 			);
@@ -256,6 +358,12 @@ export default function BookingSeats() {
 			// Recharge les sieges pour voir l'etat mis a jour
 			loadSeats();
 		} catch (err) {
+			if (err.response?.status === 409) {
+				setSeatsError(err.response?.data?.message || "Un ou plusieurs sieges sont deja reserves.");
+				loadSeats();
+				return;
+			}
+
 			setSeatsError(err.response?.data?.message || "Erreur lors de la creation de la reservation");
 		}
 	};
