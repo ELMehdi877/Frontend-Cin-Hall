@@ -45,6 +45,8 @@ export default function Navbar() {
                 {isLoggedIn && (
                     <>
                         <NavLink to="/dashboard" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition">Dashboard</NavLink>
+                        <NavLink to="/rooms" className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 transition">Rooms</NavLink>
+                        <NavLink to="/sessions-manager" className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition">Sessions</NavLink>
                         <NavLink to="/profile" className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 transition">Profil</NavLink>
                         <button
                             onClick={handleLogout}
